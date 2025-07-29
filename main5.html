@@ -23,7 +23,25 @@
             user-select: none;
             cursor: grab;
         }
-        #game-grid {
+        .game-board-4x4,
+        .target-board-4x4 {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-template-rows: repeat(4, 1fr);
+            gap: 8px;
+            width: 320px;
+            height: 320px;
+            perspective: 1000px;
+        }
+        
+        .game-board-6x6,
+        .target-board-6x6 {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            grid-template-rows: repeat(6, 1fr);
+            gap: 6px;
+            width: 450px;
+            height: 450px;
             perspective: 1000px;
         }
         .cell.match {
@@ -41,6 +59,8 @@
         .number-2 { background: #d1fae5; color: #047857; }
         .number-3 { background: #fef3c7; color: #92400e; }
         .number-4 { background: #ede9fe; color: #5b21b6; }
+        .number-5 { background: #fee2e2; color: #dc2626; }
+        .number-6 { background: #e0f2fe; color: #0c4a6e; }
         
         @keyframes pulse {
             0% { transform: scale(1); }
@@ -82,16 +102,19 @@
         <button id="hard-btn" class="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors duration-200 font-bold">
             难度2
         </button>
+        <button id="expert-btn" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors duration-200 font-bold">
+            难度3
+        </button>
     </div>
     
     <div class="flex flex-col md:flex-row gap-8">
         <div>
             <div class="text-white mb-2 text-center">步数: <span id="steps-counter" class="font-bold text-yellow-300">0</span></div>
-            <div id="game-grid" class="grid grid-cols-4 gap-2 mb-4"></div>
+            <div id="game-grid" class="game-board-4x4 mb-4"></div>
         </div>
         <div>
             <div class="text-white mb-2 text-center">目标状态</div>
-            <div id="target-grid" class="grid grid-cols-4 gap-1"></div>
+            <div id="target-grid" class="target-board-4x4"></div>
         </div>
     </div>
     <div id="message" class="text-white mt-2 text-xl font-bold"></div>
@@ -124,7 +147,9 @@
         let currentDifficulty = 2; // 默认难度2
         const cellSize = 70;
         const gridGap = 8;
-        const unitDistance = cellSize + gridGap;
+        let gridSize = 4; // 网格大小
+        let maxNumber = 4; // 最大数字
+        let unitDistance = cellSize + gridGap;
 
         function shuffleArray(arr) {
             for (let i = arr.length - 1; i > 0; i--) {
@@ -136,8 +161,30 @@
         function initGame() {
             gameState = [], targetState = [];
             grid.innerHTML = "", targetGrid.innerHTML = "";
+            
+            // 根据难度设置网格大小和数字范围
+            if (currentDifficulty === 3) {
+                gridSize = 6;
+                maxNumber = 6;
+                grid.className = "game-board-6x6";
+                targetGrid.className = "target-board-6x6";
+            } else {
+                gridSize = 4;
+                maxNumber = 4;
+                grid.className = "game-board-4x4";
+                targetGrid.className = "target-board-4x4";
+            }
+
+            // 生成数字数组，确保每个数字数量相同
             let nums = [];
-            for (let i = 1; i <= 4; i++) for (let j = 0; j < 4; j++) nums.push(i);
+            const totalCells = gridSize * gridSize;
+            const cellsPerNumber = totalCells / maxNumber;
+            for (let i = 1; i <= maxNumber; i++) {
+                for (let j = 0; j < cellsPerNumber; j++) {
+                    nums.push(i);
+                }
+            }
+            
             let gameNums = [...nums];
             shuffleArray(gameNums);
 
@@ -151,21 +198,22 @@
                     [4, 1, 2, 3]
                 ];
             } else {
-                // 难度2：随机目标状态
+                // 难度2和3：随机目标状态
                 let targetNums = [...nums];
                 shuffleArray(targetNums);
-                for (let r = 0; r < 4; r++) {
+                for (let r = 0; r < gridSize; r++) {
                     targetState[r] = [];
-                    for (let c = 0; c < 4; c++) {
-                        targetState[r][c] = targetNums[r * 4 + c];
+                    for (let c = 0; c < gridSize; c++) {
+                        targetState[r][c] = targetNums[r * gridSize + c];
                     }
                 }
             }
 
-            for (let r = 0; r < 4; r++) {
+            // 生成游戏状态
+            for (let r = 0; r < gridSize; r++) {
                 gameState[r] = [];
-                for (let c = 0; c < 4; c++) {
-                    const v = gameNums[r * 4 + c];
+                for (let c = 0; c < gridSize; c++) {
+                    const v = gameNums[r * gridSize + c];
                     gameState[r][c] = v;
                     const cell = document.createElement("div");
                     cell.className = `cell number-${v}`;
@@ -176,8 +224,9 @@
                 }
             }
 
-            for (let r = 0; r < 4; r++) {
-                for (let c = 0; c < 4; c++) {
+            // 生成目标状态
+            for (let r = 0; r < gridSize; r++) {
+                for (let c = 0; c < gridSize; c++) {
                     const v = targetState[r][c];
                     const cell = document.createElement("div");
                     cell.className = `cell number-${v}`;
@@ -196,7 +245,7 @@
             const cells = Array.from(grid.children);
             let win = true;
             cells.forEach((cell, i) => {
-                const r = Math.floor(i / 4), c = i % 4;
+                const r = Math.floor(i / gridSize), c = i % gridSize;
                 if (gameState[r][c] === targetState[r][c]) {
                     cell.classList.add("match");
                 } else {
@@ -259,12 +308,12 @@
         function moveCol(dir, steps, col) {
             isAnimating = true;
             let colData = [];
-            for (let r = 0; r < 4; r++) colData.push(gameState[r][col]);
+            for (let r = 0; r < gridSize; r++) colData.push(gameState[r][col]);
             for (let i = 0; i < steps; i++) {
                 if (dir === "up") colData.push(colData.shift());
                 else colData.unshift(colData.pop());
             }
-            for (let r = 0; r < 4; r++) gameState[r][col] = colData[r];
+            for (let r = 0; r < gridSize; r++) gameState[r][col] = colData[r];
 
             const cells = Array.from(grid.children).filter(cell => parseInt(cell.dataset.col) === col);
             cells.forEach((cell, i) => {
@@ -383,21 +432,40 @@
         // 难度选择按钮事件
         document.getElementById("easy-btn").addEventListener("click", () => {
             currentDifficulty = 1;
-            document.getElementById("easy-btn").classList.add("bg-blue-600");
-            document.getElementById("easy-btn").classList.remove("bg-blue-500");
-            document.getElementById("hard-btn").classList.add("bg-purple-500");
-            document.getElementById("hard-btn").classList.remove("bg-purple-600");
+            updateDifficultyButtons();
             initGame();
         });
         
         document.getElementById("hard-btn").addEventListener("click", () => {
             currentDifficulty = 2;
-            document.getElementById("hard-btn").classList.add("bg-purple-600");
-            document.getElementById("hard-btn").classList.remove("bg-purple-500");
-            document.getElementById("easy-btn").classList.add("bg-blue-500");
-            document.getElementById("easy-btn").classList.remove("bg-blue-600");
+            updateDifficultyButtons();
             initGame();
         });
+        
+        document.getElementById("expert-btn").addEventListener("click", () => {
+            currentDifficulty = 3;
+            updateDifficultyButtons();
+            initGame();
+        });
+        
+        function updateDifficultyButtons() {
+            // 重置所有按钮样式
+            document.getElementById("easy-btn").className = "px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors duration-200 font-bold";
+            document.getElementById("hard-btn").className = "px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors duration-200 font-bold";
+            document.getElementById("expert-btn").className = "px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors duration-200 font-bold";
+            
+            // 高亮当前难度按钮
+            if (currentDifficulty === 1) {
+                document.getElementById("easy-btn").classList.add("bg-blue-600");
+                document.getElementById("easy-btn").classList.remove("bg-blue-500");
+            } else if (currentDifficulty === 2) {
+                document.getElementById("hard-btn").classList.add("bg-purple-600");
+                document.getElementById("hard-btn").classList.remove("bg-purple-500");
+            } else if (currentDifficulty === 3) {
+                document.getElementById("expert-btn").classList.add("bg-red-600");
+                document.getElementById("expert-btn").classList.remove("bg-red-500");
+            }
+        }
         
         // 再玩一次按钮事件
         document.getElementById("restart-btn").addEventListener("click", () => {
