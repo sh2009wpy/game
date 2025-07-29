@@ -191,9 +191,12 @@
                 totalCells -= blankRows.length * blankCols.length;
             }
             
-            const cellsPerNumber = totalCells / maxNumber;
+            // 确保每个数字出现次数相等且总数匹配
+            const cellsPerNumber = Math.floor(totalCells / maxNumber);
+            const remainder = totalCells % maxNumber;
             for (let i = 1; i <= maxNumber; i++) {
-                for (let j = 0; j < cellsPerNumber; j++) {
+                const count = cellsPerNumber + (i <= remainder ? 1 : 0);
+                for (let j = 0; j < count; j++) {
                     nums.push(i);
                 }
             }
@@ -210,44 +213,128 @@
                     [3, 4, 1, 2],
                     [4, 1, 2, 3]
                 ];
-            } else {
-                // 难度2、3、4：随机目标状态
-                let targetNums = [...nums];
-                shuffleArray(targetNums);
+                
+                // 难度1：从目标状态打乱生成初始状态
+                let flatTarget = [];
                 for (let r = 0; r < gridSize; r++) {
-                    targetState[r] = [];
                     for (let c = 0; c < gridSize; c++) {
-                        // 跳过空白区域
-                        if (hasBlankArea && blankRows.includes(r) && blankCols.includes(c)) {
-                            targetState[r][c] = null;
-                        } else {
-                            targetState[r][c] = targetNums.pop();
+                        flatTarget.push(targetState[r][c]);
+                    }
+                }
+                shuffleArray(flatTarget);
+                let index = 0;
+                for (let r = 0; r < gridSize; r++) {
+                    gameState[r] = [];
+                    for (let c = 0; c < gridSize; c++) {
+                        gameState[r][c] = flatTarget[index++];
+                    }
+                }
+            } else if (currentDifficulty === 2) {
+                // 难度2：确保初始状态和目标状态数字完全一致（均匀分配）
+                let allNumbers = [];
+                let validCount = 0;
+                
+                // 计算有效格子数量
+                for (let r = 0; r < gridSize; r++) {
+                    for (let c = 0; c < gridSize; c++) {
+                        if (!(hasBlankArea && blankRows.includes(r) && blankCols.includes(c))) {
+                            validCount++;
                         }
                     }
                 }
-            }
-
-            // 生成游戏状态
-            for (let r = 0; r < gridSize; r++) {
-                gameState[r] = [];
-                for (let c = 0; c < gridSize; c++) {
-                    const cell = document.createElement("div");
-                    
-                    // 空白区域处理（难度4）
-                    if (hasBlankArea && blankRows.includes(r) && blankCols.includes(c)) {
-                        gameState[r][c] = null; // 空白区域
-                        cell.className = "cell bg-gray-200 opacity-30";
-                        cell.style.border = "2px dashed #9ca3af";
-                    } else {
-                        const v = gameNums.pop();
-                        gameState[r][c] = v;
-                        cell.className = `cell number-${v}`;
-                        cell.textContent = v;
-                        cell.dataset.row = r;
-                        cell.dataset.col = c;
+                
+                // 创建数字集合（均匀分配）
+                for (let i = 1; i <= 4; i++) {
+                    let count = Math.ceil(validCount / 4);
+                    if (i <= validCount % 4) count++;
+                    for (let j = 0; j < count; j++) {
+                        allNumbers.push(i);
                     }
-                    
-                    grid.appendChild(cell);
+                }
+                
+                // 确保数量精确匹配
+                while (allNumbers.length > validCount) allNumbers.pop();
+                while (allNumbers.length < validCount) allNumbers.push(1);
+                
+                shuffleArray(allNumbers);
+                
+                // 创建目标状态
+                let targetNumbers = [...allNumbers];
+                shuffleArray(targetNumbers);
+                let targetIndex = 0;
+                for (let r = 0; r < gridSize; r++) {
+                    targetState[r] = [];
+                    for (let c = 0; c < gridSize; c++) {
+                        if (hasBlankArea && blankRows.includes(r) && blankCols.includes(c)) {
+                            targetState[r][c] = null;
+                        } else {
+                            targetState[r][c] = targetNumbers[targetIndex++];
+                        }
+                    }
+                }
+                
+                // 创建初始状态（使用相同的数字集合）
+                let gameNumbers = [...allNumbers];
+                shuffleArray(gameNumbers);
+                let gameIndex = 0;
+                for (let r = 0; r < gridSize; r++) {
+                    gameState[r] = [];
+                    for (let c = 0; c < gridSize; c++) {
+                        if (hasBlankArea && blankRows.includes(r) && blankCols.includes(c)) {
+                            gameState[r][c] = null;
+                        } else {
+                            gameState[r][c] = gameNumbers[gameIndex++];
+                        }
+                    }
+                }
+            } else {
+                // 难度3、4：随机生成数字，只需保证左右矩阵对应数字数量相同
+                let validCount = 0;
+                let maxNumber = (currentDifficulty === 3) ? 6 : 6;
+                
+                // 计算有效格子数量
+                for (let r = 0; r < gridSize; r++) {
+                    for (let c = 0; c < gridSize; c++) {
+                        if (!(hasBlankArea && blankRows.includes(r) && blankCols.includes(c))) {
+                            validCount++;
+                        }
+                    }
+                }
+                
+                // 随机生成数字集合
+                let allNumbers = [];
+                for (let i = 0; i < validCount; i++) {
+                    allNumbers.push(Math.floor(Math.random() * maxNumber) + 1);
+                }
+                
+                // 创建目标状态
+                let targetNumbers = [...allNumbers];
+                shuffleArray(targetNumbers);
+                let targetIndex = 0;
+                for (let r = 0; r < gridSize; r++) {
+                    targetState[r] = [];
+                    for (let c = 0; c < gridSize; c++) {
+                        if (hasBlankArea && blankRows.includes(r) && blankCols.includes(c)) {
+                            targetState[r][c] = null;
+                        } else {
+                            targetState[r][c] = targetNumbers[targetIndex++];
+                        }
+                    }
+                }
+                
+                // 创建初始状态（使用相同的数字集合）
+                let gameNumbers = [...allNumbers];
+                shuffleArray(gameNumbers);
+                let gameIndex = 0;
+                for (let r = 0; r < gridSize; r++) {
+                    gameState[r] = [];
+                    for (let c = 0; c < gridSize; c++) {
+                        if (hasBlankArea && blankRows.includes(r) && blankCols.includes(c)) {
+                            gameState[r][c] = null;
+                        } else {
+                            gameState[r][c] = gameNumbers[gameIndex++];
+                        }
+                    }
                 }
             }
 
@@ -273,6 +360,7 @@
             message.textContent = `难度${currentDifficulty}：拖动某行或列进行轮换`;
             steps = 0;
             document.getElementById("steps-counter").textContent = steps;
+            renderGame();
             checkWin();
         }
 
@@ -312,7 +400,6 @@
         function checkWin() {
             const cells = Array.from(grid.children);
             let win = true;
-            let cellIndex = 0;
             
             for (let r = 0; r < gridSize; r++) {
                 for (let c = 0; c < gridSize; c++) {
@@ -321,7 +408,10 @@
                         continue;
                     }
                     
-                    const cell = cells[cellIndex++];
+                    // 找到对应的DOM元素
+                    const cell = cells[r * gridSize + c];
+                    if (!cell) continue;
+                    
                     if (gameState[r][c] === targetState[r][c]) {
                         cell.classList.add("match");
                     } else {
