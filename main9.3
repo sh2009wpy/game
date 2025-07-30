@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>数字轮换 puzzle</title>
+    <script src="https://cdn.tailwindcss.com/3.3.3"></script>
+    <style>
+        /* 基础重置与背景动画 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #f5576c 75%, #4facfe 100%);
+            background-size: 400% 400%;
+            animation: gradientShift 8s ease infinite;
+            min-height: 100vh;
+            font-family: 'Arial', sans-serif;
+        }
+
+        /* 渐变背景动画 */
+        @keyframes gradientShift {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        /* 公共单元格样式 */
+        .cell {
+            width: 70px;
+            height: 70px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: bold;
+            border-radius: 16px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            user-select: none;
+            cursor: grab;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* cell 高亮滑动动画 */
+        .cell::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            transition: left 0.5s;
+        }
+        .cell:hover::before {
+            left: 100%;
+        }
+
+        /* 公共棋盘样式 */
+        [class*="game-board-"],
+        [class*="target-board-"] {
+            display: grid;
+            perspective: 1000px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 各种尺寸棋盘配置 */
+        .game-board-3x3, .target-board-3x3 {
+            grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+            gap: 12px;
+            width: 260px;
+            height: 260px;
+        }
+        .game-board-4x4, .target-board-4x4 {
+            grid-template: repeat(4, 1fr) / repeat(4, 1fr);
+            gap: 12px;
+            width: 340px;
+            height: 340px;
+        }
+        .game-board-6x6, .target-board-6x6 {
+            grid-template: repeat(6, 1fr) / repeat(6, 1fr);
+            gap: 8px;
+            width: 480px;
+            height: 480px;
+        }
+        .game-board-9x9, .target-board-9x9 {
+            grid-template: repeat(9, 1fr) / repeat(9, 1fr);
+            gap: 4px;
+            width: 420px;
+            height: 420px;
+            padding: 12px;
+        }
+
+        /* 数字格颜色样式 */
+        .cell[class*="number-"] {
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+            font-weight: bold;
+        }
+        .number-1 { background: linear-gradient(135deg, #dbeafe, #bfdbfe); color: #1e40af; }
+        .number-2 { background: linear-gradient(135deg, #d1fae5, #a7f3d0); color: #047857; }
+        .number-3 { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #92400e; }
+        .number-4 { background: linear-gradient(135deg, #ede9fe, #ddd6fe); color: #5b21b6; }
+        .number-5 { background: linear-gradient(135deg, #fee2e2, #fecaca); color: #dc2626; }
+        .number-6 { background: linear-gradient(135deg, #e0f2fe, #bae6fd); color: #0c4a6e; }
+        .number-7 { background: linear-gradient(135deg, #fef7ff, #f3e8ff); color: #6b21a8; }
+        .number-8 { background: linear-gradient(135deg, #fff7ed, #fed7aa); color: #9a3412; }
+        .number-9 { background: linear-gradient(135deg, #f0fdf4, #bbf7d0); color: #15803d; }
+
+        /* 匹配与选中状态 */
+        .cell.match {
+            background: linear-gradient(135deg, #fbbf24, #f59e0b) !important;
+            box-shadow: 0 0 20px rgba(251, 191, 36, 0.5);
+            transform: scale(1.05);
+        }
+        .selected {
+            border: 3px solid #3b82f6;
+            transform: scale(1.1) translateZ(15px);
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.6);
+            z-index: 10;
+            position: relative;
+        }
+
+        /* 响应式适配 */
+        @media (max-width: 768px) {
+            .cell {
+                width: 35px;
+                height: 35px;
+                font-size: 14px;
+            }
+            .game-board-3x3, .target-board-3x3 {
+                width: 240px;
+                height: 240px;
+                gap: 8px;
+                padding: 15px;
+            }
+            .game-board-9x9, .target-board-9x9 {
+                width: 320px;
+                height: 320px;
+                gap: 3px;
+                padding: 8px;
+            }
+        }
+
+        /* 特定格子大小样式 */
+        .game-board-3x3 .cell,
+        .target-board-3x3 .cell {
+            width: 80px;
+            height: 80px;
+            font-size: 24px;
+        }
+        .game-board-9x9 .cell,
+        .target-board-9x9 .cell {
+            width: 45px;
+            height: 45px;
+            font-size: 16px;
+        }
+
+        /* 动画样式 */
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        @keyframes celebrate {
+            0%, 100% { transform: scale(1) rotate(0deg); }
+            25% { transform: scale(1.1) rotate(5deg); }
+            50% { transform: scale(1.2) rotate(-5deg); }
+            75% { transform: scale(1.1) rotate(3deg); }
+        }
+        .celebrate {
+            animation: celebrate 0.8s ease-in-out;
+        }
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+            40% { transform: translateY(-10px); }
+            60% { transform: translateY(-5px); }
+        }
+        .win-message {
+            animation: bounce 1s ease-in-out infinite;
+        }
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .fade-in-up {
+            animation: fadeInUp 0.6s ease-out;
+        }
+
+        /* 难度按钮样式 */
+        .difficulty-btn {
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        .difficulty-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+        .difficulty-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
+        .difficulty-btn:hover::before {
+            left: 100%;
+        }
+
+        /* 容器与信息区域 */
+        .game-container {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 30px;
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            margin: 20px;
+        }
+        .steps-counter,
+        .message {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 10px 20px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            font-size: 18px;
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        .message {
+            font-size: 20px;
+            font-weight: 600;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center p-6">
+    <div class="game-container fade-in-up">
+        <h1 class="text-4xl text-white mb-6 font-bold drop-shadow-lg text-center">
+            🎯 数字轮换 Puzzle
+            <div class="text-lg font-normal opacity-80 mt-1">拖动行列，完成挑战</div>
+        </h1>
+        
+        <!-- 难度选择 -->
+        <div class="mb-6 flex gap-4 justify-center flex-wrap">
+            <button id="tutorial-btn" class="difficulty-btn px-6 py-3 bg-gradient-to-r from-gray-400 to-gray-600 text-white rounded-xl hover:from-gray-500 hover:to-gray-700 transition-all duration-300 font-bold text-lg shadow-lg">
+                ⚪ 难度0
+            </button>
+            <button id="easy-btn" class="difficulty-btn px-6 py-3 bg-gradient-to-r from-blue-400 to-blue-600 text-white rounded-xl hover:from-blue-500 hover:to-blue-700 transition-all duration-300 font-bold text-lg shadow-lg">
+                🟢 难度1
+            </button>
+            <button id="hard-btn" class="difficulty-btn px-6 py-3 bg-gradient-to-r from-purple-400 to-purple-600 text-white rounded-xl hover:from-purple-500 hover:to-purple-700 transition-all duration-300 font-bold text-lg shadow-lg">
+                🟣 难度2
+            </button>
+            <button id="challenge-btn" class="difficulty-btn px-6 py-3 bg-gradient-to-r from-indigo-400 to-indigo-600 text-white rounded-xl hover:from-indigo-500 hover:to-indigo-700 transition-all duration-300 font-bold text-lg shadow-lg">
+                    难度2.5
+            </button>
+            <button id="expert-btn" class="difficulty-btn px-6 py-3 bg-gradient-to-r from-red-400 to-red-600 text-white rounded-xl hover:from-red-500 hover:to-red-700 transition-all duration-300 font-bold text-lg shadow-lg">
+                🔴 难度3
+            </button>
+            <button id="master-btn" class="difficulty-btn px-6 py-3 bg-gradient-to-r from-orange-400 to-orange-600 text-white rounded-xl hover:from-orange-500 hover:to-orange-700 transition-all duration-300 font-bold text-lg shadow-lg">
+                🟠 难度4
+            </button>
+            <button id="legend-btn" class="difficulty-btn px-6 py-3 bg-gradient-to-r from-pink-400 to-pink-600 text-white rounded-xl hover:from-pink-500 hover:to-pink-700 transition-all duration-300 font-bold text-lg shadow-lg">
+                    难度5
+            </button>
+        </div>
+        
+        <div class="flex flex-col md:flex-row gap-12 items-start justify-center">
+            <div class="text-center">
+                <div class="flex items-center justify-center gap-4 text-white mb-4">
+                    <span class="text-sm opacity-80">当前步数</span>
+                    <span id="steps-counter" class="text-2xl text-yellow-300 font-bold">0</span>
+                </div>
+                <div class="flex items-center justify-center gap-4 text-white mb-4">
+                    <span class="text-sm opacity-80">用时</span>
+                    <span id="timer" class="text-2xl text-blue-300 font-bold">00:00</span>
+                </div>
+                <div id="game-grid" class="game-board-4x4 mb-4"></div>
+                <div class="text-white text-lg font-semibold mt-2">游戏区域</div>
+            </div>
+            <div class="text-center">
+                <div class="flex items-center justify-center gap-4 text-white mb-4">
+                    <span class="text-sm opacity-80">目标状态</span>
+                    <span class="text-2xl font-bold invisible">-</span>
+                </div>
+                <div id="target-grid" class="target-board-4x4 mb-4"></div>
+                <div class="text-white text-lg font-semibold mt-2">目标区域</div>
+            </div>
+        </div>
+        
+        <div id="message" class="message text-white mt-6 text-center"></div>
+        
+        <button id="restart-btn" class="mt-6 px-8 py-3 bg-gradient-to-r from-green-400 to-green-600 text-white rounded-xl hover:from-green-500 hover:to-green-700 transition-all duration-300 shadow-lg font-bold text-lg hidden">
+            🔄 重新开始
+        </button>
+    </div>
+    
+    <!-- 胜利弹窗 -->
+    <div id="win-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-3xl p-10 text-center max-w-md mx-4 transform scale-95 transition-transform duration-300">
+            <div class="text-6xl mb-4">🎉</div>
+            <h2 class="text-3xl font-bold text-green-600 mb-4">恭喜通关！</h2>
+            <div class="text-xl text-gray-700 mb-2">你用了 <span id="final-steps" class="font-bold text-blue-600 text-2xl">0</span> 步完成挑战</div>
+            <div class="text-lg text-gray-500 mb-8">表现非常出色！</div>
+            <div class="flex gap-4 justify-center">
+                <button id="modal-restart-btn" class="px-8 py-3 bg-gradient-to-r from-green-400 to-green-600 text-white rounded-xl hover:from-green-500 hover:to-green-700 transition-all duration-300 shadow-lg font-bold">
+                    🎮 再玩一次
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const grid = document.getElementById("game-grid");
+        const targetGrid = document.getElementById("target-grid");
+        const message = document.getElementById("message");
+        let gameState = [], targetState = [];
+        let dragStartX = null, dragStartY = null, dragRow = null, dragCol = null;
+        let isAnimating = false;
+        let lastMoveDistance = 0;
+        let steps = 0;
+        let timerInterval = null;
+        let startTime = null;
+        let elapsedTime = 0;
+        let currentDifficulty = 0; // 默认难度2
+        const cellSize = 70;
+        const gridGap = 8;
+        let gridSize = 4; // 网格大小
+        let maxNumber = 4; // 最大数字
+        let unitDistance = cellSize + gridGap;
+        let hasBlankArea = false; // 是否有空白区域
+        let blankRows = [2, 3]; // 空白区域的行（难度4）
+        let blankCols = [2, 3]; // 空白区域的列（难度4）
+        let blankPattern = []; // 难度5的空白模式
+        let gridSizeList = [3, 4, 4, 6, 6, 9, 4];
+        let maxNumberList = [3, 4, 4, 6, 6, 9, 15];
+        function shuffleArray(arr) { // 随机打乱数组
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+        }
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function startTimer() {
+            if (timerInterval) clearInterval(timerInterval);
+            startTime = Date.now() - elapsedTime;
+            timerInterval = setInterval(() => {
+                elapsedTime = Date.now() - startTime;
+                const seconds = Math.floor(elapsedTime / 1000);
+                document.getElementById('timer').textContent = formatTime(seconds);
+            }, 1000);
+        }
+
+        function stopTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+        }
+
+        function resetTimer() {
+            stopTimer();
+            elapsedTime = 0;
+            startTime = null;
+            document.getElementById('timer').textContent = '00:00';
+        }
+
+        function initGame() {
+            gameState = [], targetState = [];
+            grid.innerHTML = "", targetGrid.innerHTML = "";
+            resetTimer();
+            
+            // 根据难度设置网格大小和数字范围
+            hasBlankArea = (currentDifficulty === 4 || currentDifficulty === 5);
+            gridSize = gridSizeList[currentDifficulty];
+            maxNumber = maxNumberList[currentDifficulty];
+            unitDistance = (currentDifficulty === 5)?49:78;
+            if (currentDifficulty === 0) {
+                grid.className = "game-board-3x3";
+                targetGrid.className = "target-board-3x3";
+            } else if (currentDifficulty === 5) {
+                grid.className = "game-board-9x9";
+                targetGrid.className = "target-board-9x9";
+                generateBlankPattern();
+            } else if (currentDifficulty === 3 || currentDifficulty === 4) {
+                grid.className = "game-board-6x6";
+                targetGrid.className = "target-board-6x6";
+            } else if (currentDifficulty === 6) {
+                grid.className = "game-board-4x4";
+                targetGrid.className = "target-board-4x4";
+            } else {
+                grid.className = "game-board-4x4";
+                targetGrid.className = "target-board-4x4";
+            }
+
+            // 生成数字数组，确保每个数字数量相同
+            let nums = [];
+            let totalCells = gridSize * gridSize;
+            
+            // 计算有效格子数量
+            let validCount = 0;
+            if (currentDifficulty === 5) {
+                // 难度5：计算非空白格子数量
+                for (let r = 0; r < gridSize; r++) {
+                    for (let c = 0; c < gridSize; c++) {
+                        if (!isBlankCell(r, c)) {
+                            validCount++;
+                        }
+                    }
+                }
+                totalCells = validCount;
+            } else if (hasBlankArea && currentDifficulty === 4) {
+                // 难度4需要减去空白区域的格子
+                totalCells -= blankRows.length * blankCols.length;
+            }
+            // 确保每个数字出现次数相等且总数匹配
+            const cellsPerNumber = Math.floor(totalCells / maxNumber);
+            const remainder = totalCells % maxNumber;
+            for (let i = 1; i <= maxNumber; i++) {
+                const count = cellsPerNumber + (i <= remainder ? 1 : 0);
+                for (let j = 0; j < count; j++) {
+                    nums.push(i);
+                }
+            }
+            
+            // 确保数量精确匹配
+            while (nums.length > totalCells) nums.pop();
+            while (nums.length < totalCells) nums.push(1);
+            
+            let gameNums = [...nums];
+            shuffleArray(gameNums);
+            let targetNums = [...nums];
+            shuffleArray(targetNums);
+            // 根据难度设置目标状态
+            if (currentDifficulty === 0 || currentDifficulty === 1) {//难度0、1
+                if (currentDifficulty === 0){
+                    targetState = [
+                        [1, 2, 3],
+                        [2, 3, 1],
+                        [3, 1, 2]
+                    ];    
+                } else {
+                    targetState = [
+                        [1, 2, 3, 4],
+                        [1, 2, 3, 4],
+                        [1, 2, 3, 4],
+                        [1, 2, 3, 4]
+                    ];
+                }
+                let flatTarget = [];
+                for (let r = 0; r < gridSize; r++) {
+                    for (let c = 0; c < gridSize; c++) {
+                        flatTarget.push(targetState[r][c]);
+                    }
+                }
+                shuffleArray(flatTarget);
+                let index = 0;
+                for (let r = 0; r < gridSize; r++) {
+                    gameState[r] = [];
+                    for (let c = 0; c < gridSize; c++) {
+                        gameState[r][c] = flatTarget[index++];
+                    }
+                }
+            } else if (currentDifficulty === 2 || currentDifficulty === 6) {
+                // 难度2：确保初始状态和目标状态数字完全一致（均匀分配）
+                let allNumbers = [];
+                let validCount = gridSize * gridSize;
+                
+                // 创建数字集合（均匀分配）
+                for (let i = 1; i <= maxNumber; i++) {
+                    let count = Math.floor(validCount / maxNumber);
+                    if (i <= validCount % maxNumber) count++;
+                    for (let j = 0; j < count; j++) {
+                        allNumbers.push(i);
+                    }
+                }
+                // 确保数量精确匹配
+                while (allNumbers.length > validCount) allNumbers.pop();
+                while (allNumbers.length < validCount) allNumbers.push(1);
+                
+                shuffleArray(allNumbers);
+                
+                // 创建目标状态
+                let targetNumbers = [...allNumbers];
+                shuffleArray(targetNumbers);
+                let targetIndex = 0;
+                for (let r = 0; r < gridSize; r++) {
+                    targetState[r] = [];
+                    for (let c = 0; c < gridSize; c++) {
+                        if (hasBlankArea && blankRows.includes(r) && blankCols.includes(c)) {
+                            targetState[r][c] = null;
+                        } else {
+                            targetState[r][c] = targetNumbers[targetIndex++];
+                        }
+                    }
+                }
+                
+                // 创建初始状态（使用相同的数字集合）
+                let gameNumbers = [...allNumbers];
+                shuffleArray(gameNumbers);
+                let gameIndex = 0;
+                for (let r = 0; r < gridSize; r++) {
+                    gameState[r] = [];
+                    for (let c = 0; c < gridSize; c++) {
+                        if (hasBlankArea && blankRows.includes(r) && blankCols.includes(c)) {
+                            gameState[r][c] = null;
+                        } else {
+                            gameState[r][c] = gameNumbers[gameIndex++];
+                        }
+                    }
+                }
+            } else {
+                // 难度3、4、5：随机生成数字，只需保证左右矩阵对应数字数量相同
+                let validCount = 0;
+                let maxNumber = (currentDifficulty === 5) ? 9 : 6;
+                // 计算有效格子数量
+                if (currentDifficulty !== 5){
+                    for (let r = 0; r < gridSize; r++) {
+                        for (let c = 0; c < gridSize; c++) {
+                            if (!(hasBlankArea && blankRows.includes(r) && blankCols.includes(c))) {
+                                validCount++;
+                            }
+                        }
+                    }    
+                }else {
+                    validCount = 65;
+                }
+                
+                // 随机生成数字集合
+                let allNumbers = [];
+                for (let i = 0; i < validCount; i++) {
+                    allNumbers.push(Math.floor(Math.random() * maxNumber) + 1);
+                }
+                // 创建目标状态
+                let targetNumbers = [...allNumbers];
+                shuffleArray(targetNumbers);
+                let targetIndex = 0;
+                for (let r = 0; r < gridSize; r++) {
+                    targetState[r] = [];
+                    for (let c = 0; c < gridSize; c++) {
+                        if (hasBlankArea && currentDifficulty >= 4 && blankPattern[currentDifficulty] && blankPattern[currentDifficulty][r][c]) {
+                            targetState[r][c] = null;
+                        } else {
+                            targetState[r][c] = targetNumbers[targetIndex++];
+                        }
+                    }
+                }
+                
+                // 创建初始状态（使用相同的数字集合）
+                let gameNumbers = [...allNumbers];
+                shuffleArray(gameNumbers);
+                let gameIndex = 0;
+                for (let r = 0; r < gridSize; r++) {
+                    gameState[r] = [];
+                    for (let c = 0; c < gridSize; c++) {
+                        if (hasBlankArea && currentDifficulty >= 4 && blankPattern[currentDifficulty] && blankPattern[currentDifficulty][r][c]) {
+                            gameState[r][c] = null;
+                        } else {
+                            gameState[r][c] = gameNumbers[gameIndex++];
+                        }
+                    }
+                }
+            }
+
+            // 生成目标状态
+            for (let r = 0; r < gridSize; r++) {
+                for (let c = 0; c < gridSize; c++) {
+                    const cell = document.createElement("div");
+                    // 空白区域处理（难度4和5）
+                    if (hasBlankArea && isBlankCell(r, c)) {
+                        cell.className = "cell bg-gray-200 opacity-30";
+                        cell.style.border = "2px dashed #9ca3af";
+                    } else {
+                        const v = targetState[r][c];
+                        cell.className = `cell number-${v}`;
+                        cell.textContent = v;
+                    }
+                    targetGrid.appendChild(cell);
+                }
+            }
+
+            message.textContent = `难度${currentDifficulty}：拖动某行或列进行轮换`;
+            steps = 0;
+            document.getElementById("steps-counter").textContent = steps;
+            renderGame();
+            checkWin();
+        }
+
+        function renderGame() {// 渲染游戏状态
+            grid.innerHTML = "";
+            
+            let cellIndex = 0;
+            for (let r = 0; r < gridSize; r++) {
+                for (let c = 0; c < gridSize; c++) {
+                    // 跳过空白区域
+                    if ((currentDifficulty === 5 && isBlankCell(r, c))||
+                        (hasBlankArea && currentDifficulty === 4 && blankRows.includes(r) && blankCols.includes(c))) {
+                        const cell = document.createElement("div");
+                        cell.className = "cell bg-gray-200 opacity-30";
+                        cell.style.border = "2px dashed #9ca3af";
+                        grid.appendChild(cell);
+                        continue;
+                    }
+                    
+                    const value = gameState[r][c];
+                    const targetValue = targetState[r][c];
+                    const cell = document.createElement("div");
+                    
+                    cell.className = `cell number-${value}`;
+                    if (value === targetValue) {
+                        cell.classList.add("match");
+                    }
+                    cell.textContent = value;
+                    cell.dataset.row = r;
+                    cell.dataset.col = c;
+                    
+                    grid.appendChild(cell);
+                    cellIndex++;
+                }
+            }
+        }
+
+        function checkWin() {
+            const cells = Array.from(grid.children);
+            let win = true;
+            
+            for (let r = 0; r < gridSize; r++) {
+                for (let c = 0; c < gridSize; c++) {
+                    // 跳过空白区域
+                    if (hasBlankArea && isBlankCell(r, c)) {
+                        continue;
+                    }
+                    
+                    // 找到对应的DOM元素
+                    const cell = cells[r * gridSize + c];
+                    if (!cell) continue;
+                    
+                    if (gameState[r][c] === targetState[r][c]) {
+                        cell.classList.add("match");
+                    } else {
+                        cell.classList.remove("match");
+                        win = false;
+                    }
+                }
+            }
+            
+            if (win) {
+                stopTimer();
+                const finalTime = Math.floor(elapsedTime / 1000);
+                
+                // 添加庆祝动画
+                cells.forEach(cell => {
+                    if (!cell.classList.contains("bg-gray-200")) {
+                        cell.classList.add("celebrate");
+                    }
+                });
+                
+                // 显示胜利弹窗
+                setTimeout(() => {
+                    document.getElementById("final-steps").textContent = steps;
+                    document.getElementById("win-modal").classList.remove("hidden");
+                    
+                    // 添加用时显示
+                    const timeElement = document.createElement('p');
+                    timeElement.textContent = `用时：${formatTime(finalTime)}`;
+                    timeElement.className = 'text-lg text-blue-400 mt-2';
+                    const modalContent = document.querySelector('#win-modal .text-center');
+                    if (modalContent && !document.querySelector('#win-modal .text-blue-400')) {
+                        modalContent.appendChild(timeElement);
+                    }
+                    
+                    // 3秒后移除动画类
+                    cells.forEach(cell => {
+                        cell.classList.remove("celebrate");
+                    });
+                }, 1000);
+            }
+        }
+
+        function generateBlankPattern() {
+            blankPattern = [];
+            blankPattern[5] = [];
+            blankPattern[4] = [];
+            for (let r = 0; r < 9; r++) {
+                blankPattern[5][r] = [];
+                for (let c = 0; c < 9; c++) {
+                    if (r % 2 === 1 && c % 2 === 1) { 
+                        blankPattern[5][r][c] = true; 
+                    } else {
+                        blankPattern[5][r][c] = false; 
+                    }
+                }
+            }
+            for (let r = 0; r < 6; r++) {
+                blankPattern[4][r] = [];
+                for (let c = 0; c < 6; c++) {
+                    if ((r === 2 || r === 3) && (c === 2 || c === 3)) { 
+                        blankPattern[4][r][c] = true; 
+                    } else {
+                        blankPattern[4][r][c] = false; 
+                    }
+                }
+            }
+        }
+
+        function isBlankCell(row, col) {
+            if (currentDifficulty <= 3 ) return false;
+            return blankPattern[currentDifficulty][row][col];
+        }
+
+        function isRowBlocked(row) {
+            if (!hasBlankArea) return false;// 检查该行是否有任何空白格子
+            for (let c = 0; c < gridSize; c++) {
+                if (isBlankCell(row, c)) return true;
+            }
+            return false;
+        }
+
+        function isColBlocked(col) {
+            if (!hasBlankArea) return false;// 检查该列是否有任何空白格子
+            for (let r = 0; r < gridSize; r++) {
+                if (isBlankCell(r, col)) return true;
+            }
+            return false;
+        }
+
+        function playMoveSound() {
+            // 创建简单的音效
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.value = 800;
+            oscillator.type = 'sine';
+            
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.1);
+        }
+
+        function moveRow(dir, steps, row) {
+            // 检查该行是否被空白区域阻挡
+            if (isRowBlocked(row)) {
+                message.textContent = "该行经过空白区域，无法移动！";
+                setTimeout(() => {
+                    message.textContent = `难度${currentDifficulty}：拖动某行或列进行轮换`;
+                }, 2000);
+                return;
+            }
+
+            isAnimating = true;
+            
+            // 收集该行的所有非空白数据
+            const rowData = [];
+            const positions = []; // 记录非空白数据的位置
+            
+            for (let c = 0; c < gridSize; c++) {
+                if (!(hasBlankArea && isBlankCell(row, c))) {
+                    rowData.push(gameState[row][c]);
+                    positions.push(c);
+                }
+            }
+            
+            // 实现循环轮换：向右移动时最后一格移动到第一格，向左移动时第一格移动到最后一格
+            for (let i = 0; i < steps; i++) {
+                if (dir === "left") {
+                    // 向左移动：第一格移动到最后一格
+                    const first = rowData.shift();
+                    rowData.push(first);
+                    playMoveSound(); // 播放循环移动音效
+                } else {
+                    // 向右移动：最后一格移动到第一格
+                    const last = rowData.pop();
+                    rowData.unshift(last);
+                    playMoveSound(); // 播放循环移动音效
+                }
+            }
+            
+            // 将轮换后的数据放回原来的位置
+            for (let i = 0; i < positions.length; i++) {
+                gameState[row][positions[i]] = rowData[i];
+            }
+
+            renderGame();
+            setTimeout(() => {
+                isAnimating = false;
+                checkWin();
+            }, 50);
+        }
+
+        function moveCol(dir, steps, col) {
+            // 检查该列是否被空白区域阻挡
+            if (isColBlocked(col)) {
+                message.textContent = "该列经过空白区域，无法移动！";
+                setTimeout(() => {
+                    message.textContent = `难度${currentDifficulty}：拖动某行或列进行轮换`;
+                }, 2000);
+                return;
+            }
+
+            isAnimating = true;
+            
+            // 收集该列的所有非空白数据
+            const colData = [];
+            const positions = []; // 记录非空白数据的位置
+            
+            for (let r = 0; r < gridSize; r++) {
+                if (!(hasBlankArea && isBlankCell(r, col))) {
+                    colData.push(gameState[r][col]);
+                    positions.push(r);
+                }
+            }
+            
+            // 实现循环轮换：向下移动时最后一格移动到第一格，向上移动时第一格移动到最后一格
+            for (let i = 0; i < steps; i++) {
+                if (dir === "up") {
+                    colData.push(colData.shift());
+                    playMoveSound(); // 播放循环移动音效
+                } else {
+                    colData.unshift(colData.pop());
+                    playMoveSound(); // 播放循环移动音效
+                }
+            }
+            
+            // 将轮换后的数据放回原来的位置
+            for (let i = 0; i < positions.length; i++) {
+                gameState[positions[i]][col] = colData[i];
+            }
+
+            renderGame();
+            setTimeout(() => {
+                isAnimating = false;
+                checkWin();
+            }, 50);
+        }
+
+        grid.addEventListener("mousedown", (e) => {
+            if (isAnimating) return;
+            const cell = e.target.closest(".cell");
+            if (!cell) return;
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+            dragRow = parseInt(cell.dataset.row);
+            dragCol = parseInt(cell.dataset.col);
+            
+            // 添加选中效果
+            const allCells = Array.from(grid.children);
+            allCells.forEach(c => c.classList.remove("selected"));
+            
+            // 高亮当前行或列（根据初始点击位置）
+            const rowCells = Array.from(grid.children).filter(c => parseInt(c.dataset.row) === dragRow);
+            const colCells = Array.from(grid.children).filter(c => parseInt(c.dataset.col) === dragCol);
+            
+            // 初始时同时高亮行和列，拖动过程中根据方向调整
+            rowCells.forEach(c => c.classList.add("selected"));
+            colCells.forEach(c => c.classList.add("selected"));
+        });
+
+        grid.addEventListener("mousemove", (e) => {
+            if (dragStartX === null || isAnimating) return;
+            const dx = e.clientX - dragStartX;
+            const dy = e.clientY - dragStartY;
+
+            const distance = Math.max(Math.abs(dx), Math.abs(dy));
+            const currentMoveDistance = Math.floor(distance / unitDistance);
+
+            // 每超过0.5格就执行一次轮换
+            if (currentMoveDistance > lastMoveDistance) {
+                const moveSteps = currentMoveDistance - lastMoveDistance;
+                lastMoveDistance = currentMoveDistance;
+                
+                // 增加步数
+                if (moveSteps > 0) {
+                        if (!startTime) startTimer();
+                        steps += moveSteps;
+                        document.getElementById("steps-counter").textContent = steps;
+
+                        if (Math.abs(dx) >= Math.abs(dy)) {
+                            moveRow(dx > 0 ? "right" : "left", moveSteps, dragRow);
+                        } else {
+                            moveCol(dy > 0 ? "down" : "up", moveSteps, dragCol);
+                        }
+                    }
+            }
+
+            // 根据拖动方向动态调整选中效果
+            const allCells = Array.from(grid.children);
+            allCells.forEach(c => c.classList.remove("selected"));
+            
+            // 显示拖动预览并更新选中效果
+            if (Math.abs(dx) > Math.abs(dy)) {
+                // 水平拖动，高亮整行
+                const rowCells = Array.from(grid.children).filter(cell => parseInt(cell.dataset.row) === dragRow);
+                rowCells.forEach(cell => {
+                    cell.style.transition = "none";
+                    cell.style.transform = `translateX(${dx % unitDistance}px)`;
+                    cell.classList.add("selected");
+                });
+            } else {
+                // 垂直拖动，高亮整列
+                const colCells = Array.from(grid.children).filter(cell => parseInt(cell.dataset.col) === dragCol);
+                colCells.forEach(cell => {
+                    cell.style.transition = "none";
+                    cell.style.transform = `translateY(${dy % unitDistance}px)`;
+                    cell.classList.add("selected");
+                });
+            }
+        });
+
+        grid.addEventListener("mouseup", (e) => {
+            if (dragStartX === null || isAnimating) return;
+            // 清理拖动预览和选中效果
+            const cells = Array.from(grid.children).filter(cell => 
+                parseInt(cell.dataset.row) === dragRow || parseInt(cell.dataset.col) === dragCol
+            );
+            cells.forEach(cell => {
+                cell.style.transition = "transform 0.2s ease";
+                cell.style.transform = "translateX(0) translateY(0)";
+                cell.classList.remove("selected");
+            });
+
+            lastMoveDistance = 0;
+            dragStartX = dragStartY = dragRow = dragCol = null;
+        });
+
+        grid.addEventListener("mouseleave", () => {
+            // 清理选中效果
+            Array.from(grid.children).forEach(cell => {
+                cell.classList.remove("selected");
+            });
+            dragStartX = dragStartY = dragRow = dragCol = null;
+        });
+
+        initGame();
+        
+        // 难度选择按钮事件
+        document.getElementById("tutorial-btn").addEventListener("click", () => {
+            currentDifficulty = 0;
+            updateDifficultyButtons();
+            initGame();
+        });
+        document.getElementById("easy-btn").addEventListener("click", () => {
+            currentDifficulty = 1;
+            updateDifficultyButtons();
+            initGame();
+        });
+        document.getElementById("hard-btn").addEventListener("click", () => {
+            currentDifficulty = 2;
+            updateDifficultyButtons();
+            initGame();
+        });
+        document.getElementById("expert-btn").addEventListener("click", () => {
+            currentDifficulty = 3;
+            updateDifficultyButtons();
+            initGame();
+        });
+        document.getElementById("master-btn").addEventListener("click", () => {
+            currentDifficulty = 4;
+            updateDifficultyButtons();
+            initGame();
+        });
+        document.getElementById("legend-btn").addEventListener("click", () => {
+            currentDifficulty = 5;
+            updateDifficultyButtons();
+            initGame();
+        });
+        document.getElementById("challenge-btn").addEventListener("click", () => {
+            currentDifficulty = 6;
+            updateDifficultyButtons();
+            initGame();
+        });
+        document.getElementById("modal-restart-btn").addEventListener("click", () => {
+            document.getElementById("win-modal").classList.add("hidden");
+            initGame();
+        });
+        document.getElementById("restart-btn").addEventListener("click", () => {
+            initGame();
+        });
+        
+        function updateDifficultyButtons() {//更新难度按钮
+            const buttons = [
+                { id: 'tutorial-btn', active: 'from-gray-500 to-gray-700', inactive: 'from-gray-400 to-gray-600' },
+                { id: 'easy-btn', active: 'from-blue-500 to-blue-700', inactive: 'from-blue-400 to-blue-600' },
+                { id: 'hard-btn', active: 'from-purple-500 to-purple-700', inactive: 'from-purple-400 to-purple-600' },
+                { id: 'expert-btn', active: 'from-red-500 to-red-700', inactive: 'from-red-400 to-red-600' },
+                { id: 'master-btn', active: 'from-orange-500 to-orange-700', inactive: 'from-orange-400 to-orange-600' },
+                { id: 'legend-btn', active: 'from-pink-500 to-pink-700', inactive: 'from-pink-400 to-pink-600' },
+                { id: 'challenge-btn', active: 'from-indigo-500 to-indigo-700', inactive: 'from-indigo-400 to-indigo-600' }
+            ];
+            
+            buttons.forEach((btn, index) => {
+                const element = document.getElementById(btn.id);
+                const isActive = currentDifficulty === index;
+                const gradient = isActive ? btn.active : btn.inactive;
+                element.className = `difficulty-btn px-6 py-3 bg-gradient-to-r ${gradient} text-white rounded-xl transition-all duration-300 font-bold text-lg shadow-lg`;
+            });
+        }
+        
+        // 添加触摸支持
+        let touchStartX = null;
+        let touchStartY = null;
+        
+        grid.addEventListener('touchstart', (e) => {
+            if (isAnimating) return;
+            const touch = e.touches[0];
+            const cell = e.target.closest(".cell");
+            if (!cell) return;
+            
+            touchStartX = touch.clientX;
+            touchStartY = touch.clientY;
+            dragRow = parseInt(cell.dataset.row);
+            dragCol = parseInt(cell.dataset.col);
+            
+            // 添加选中效果
+            const allCells = Array.from(grid.children);
+            allCells.forEach(c => c.classList.remove("selected"));
+            
+            const rowCells = Array.from(grid.children).filter(c => parseInt(c.dataset.row) === dragRow);
+            const colCells = Array.from(grid.children).filter(c => parseInt(c.dataset.col) === dragCol);
+            
+            rowCells.forEach(c => c.classList.add("selected"));
+            colCells.forEach(c => c.classList.add("selected"));
+        });
+        
+        grid.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (touchStartX === null || isAnimating) return;
+            
+            const touch = e.touches[0];
+            const dx = touch.clientX - touchStartX;
+            const dy = touch.clientY - touchStartY;
+            
+            const distance = Math.max(Math.abs(dx), Math.abs(dy));
+            const currentMoveDistance = Math.floor(distance / unitDistance);
+            
+            if (currentMoveDistance > lastMoveDistance) {
+                const moveSteps = currentMoveDistance - lastMoveDistance;
+                lastMoveDistance = currentMoveDistance;
+                
+                if (moveSteps > 0) {
+                    if (!startTime) startTimer();
+                    steps += moveSteps;
+                    document.getElementById("steps-counter").textContent = steps;
+                    
+                    if (Math.abs(dx) >= Math.abs(dy)) {
+                        moveRow(dx > 0 ? "right" : "left", moveSteps, dragRow);
+                    } else {
+                        moveCol(dy > 0 ? "down" : "up", moveSteps, dragCol);
+                    }
+                }
+            }
+        });
+        
+        grid.addEventListener('touchend', () => {
+            // 清理选中效果
+            Array.from(grid.children).forEach(cell => {
+                cell.classList.remove("selected");
+                cell.style.transition = "transform 0.2s ease";
+                cell.style.transform = "translateX(0) translateY(0)";
+            });
+            
+            lastMoveDistance = 0;
+            touchStartX = touchStartY = dragRow = dragCol = null;
+        });
+        
+        // 页面加载动画
+        window.addEventListener('load', () => {
+            document.querySelector('.game-container').classList.add('fade-in-up');
+        });
+    </script>
+</body>
+</html>
